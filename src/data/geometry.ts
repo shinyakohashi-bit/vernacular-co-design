@@ -2,29 +2,29 @@ import { NODES, MAIN_ORDER } from './nodes';
 
 export interface Point { x: number; y: number }
 
-const CANVAS = { width: 2000, height: 2800 };
+const CANVAS = { width: 1600, height: 2400 };
 
 const MAIN_SPINE: Record<string, Point> = {
-  nagomi:     { x: 920, y: 240 },
-  assemblage: { x: 800, y: 820 },
-  drift:      { x: 940, y: 1500 },
-  weaving:    { x: 840, y: 2160 },
+  nagomi:     { x: 780, y: 200 },
+  assemblage: { x: 680, y: 680 },
+  drift:      { x: 800, y: 1260 },
+  weaving:    { x: 720, y: 1840 },
 };
 
-const ESTUARY: Point = { x: 870, y: 2600 };
+const ESTUARY: Point = { x: 740, y: 2200 };
 
 const TRIBUTARY_POSITIONS: Record<string, Point> = {
-  watershed:        { x: 1380, y: 120 },
-  gardener:         { x: 420, y: 380 },
-  posthuman:        { x: 1260, y: 540 },
-  aizu:             { x: 440, y: 780 },
-  syneco:           { x: 480, y: 1140 },
-  toolview:         { x: 1340, y: 1260 },
-  takeno:           { x: 940, y: 1500 },
-  minamata:         { x: 460, y: 1780 },
-  designothernames: { x: 1340, y: 1820 },
-  resourceful:      { x: 1380, y: 2020 },
-  fudo:             { x: 420, y: 2060 },
+  watershed:        { x: 1180, y: 100 },
+  gardener:         { x: 340, y: 340 },
+  posthuman:        { x: 1100, y: 460 },
+  aizu:             { x: 360, y: 640 },
+  syneco:           { x: 380, y: 960 },
+  toolview:         { x: 1160, y: 1060 },
+  takeno:           { x: 800, y: 1260 },
+  minamata:         { x: 380, y: 1520 },
+  designothernames: { x: 1160, y: 1540 },
+  resourceful:      { x: 1200, y: 1720 },
+  fudo:             { x: 340, y: 1760 },
 };
 
 export function getNodePosition(id: string): Point {
@@ -38,10 +38,10 @@ export function getMainRiverPath(): string {
   const pts = [...MAIN_ORDER.map(id => MAIN_SPINE[id]), ESTUARY];
   let d = `M ${pts[0].x} ${pts[0].y}`;
   const controls: [Point, Point][] = [
-    [{ x: 860, y: 400 }, { x: 760, y: 660 }],
-    [{ x: 860, y: 1000 }, { x: 1000, y: 1280 }],
-    [{ x: 970, y: 1700 }, { x: 880, y: 1960 }],
-    [{ x: 830, y: 2340 }, { x: 860, y: 2500 }],
+    [{ x: 730, y: 340 }, { x: 650, y: 540 }],
+    [{ x: 730, y: 840 }, { x: 860, y: 1080 }],
+    [{ x: 830, y: 1440 }, { x: 750, y: 1660 }],
+    [{ x: 710, y: 1980 }, { x: 730, y: 2120 }],
   ];
   for (let i = 0; i < pts.length - 1; i++) {
     const [cp1, cp2] = controls[i];
@@ -148,16 +148,16 @@ function approxLen(seg: CubicSeg): number {
 interface TribCurve { cp1: Point; cp2: Point }
 
 const TRIBUTARY_CURVES: Record<string, TribCurve> = {
-  gardener:         { cp1: { x: 380, y: 540 },  cp2: { x: 620, y: 720 } },
-  posthuman:        { cp1: { x: 1200, y: 640 }, cp2: { x: 1000, y: 780 } },
-  aizu:             { cp1: { x: 520, y: 800 },  cp2: { x: 680, y: 820 } },
-  syneco:           { cp1: { x: 540, y: 1300 }, cp2: { x: 760, y: 1440 } },
-  toolview:         { cp1: { x: 1280, y: 1380 }, cp2: { x: 1080, y: 1470 } },
-  minamata:         { cp1: { x: 420, y: 1940 }, cp2: { x: 640, y: 2080 } },
-  designothernames: { cp1: { x: 1280, y: 1960 }, cp2: { x: 1040, y: 2100 } },
-  resourceful:      { cp1: { x: 1300, y: 2100 }, cp2: { x: 1020, y: 2140 } },
-  fudo:             { cp1: { x: 460, y: 2140 },  cp2: { x: 660, y: 2160 } },
-  watershed:        { cp1: { x: 1300, y: 160 },  cp2: { x: 1060, y: 220 } },
+  gardener:         { cp1: { x: 300, y: 480 },  cp2: { x: 520, y: 620 } },
+  posthuman:        { cp1: { x: 1040, y: 540 }, cp2: { x: 860, y: 650 } },
+  aizu:             { cp1: { x: 440, y: 660 },  cp2: { x: 580, y: 680 } },
+  syneco:           { cp1: { x: 440, y: 1100 }, cp2: { x: 640, y: 1220 } },
+  toolview:         { cp1: { x: 1100, y: 1160 }, cp2: { x: 940, y: 1240 } },
+  minamata:         { cp1: { x: 340, y: 1660 }, cp2: { x: 540, y: 1780 } },
+  designothernames: { cp1: { x: 1100, y: 1660 }, cp2: { x: 900, y: 1790 } },
+  resourceful:      { cp1: { x: 1120, y: 1800 }, cp2: { x: 880, y: 1830 } },
+  fudo:             { cp1: { x: 380, y: 1820 },  cp2: { x: 560, y: 1840 } },
+  watershed:        { cp1: { x: 1120, y: 140 },  cp2: { x: 920, y: 190 } },
 };
 
 export function getTributaryPath(id: string): string | null {
@@ -188,10 +188,10 @@ export function getSubterraneanPath(fromId: string, toId: string): string {
   const a = getNodePosition(fromId);
   const b = getNodePosition(toId);
   if (fromId === 'minamata' && toId === 'nagomi') {
-    return `M ${a.x} ${a.y} C ${a.x + 260} ${a.y - 400}, ${b.x + 300} ${b.y + 500}, ${b.x} ${b.y}`;
+    return `M ${a.x} ${a.y} C ${a.x + 220} ${a.y - 340}, ${b.x + 260} ${b.y + 420}, ${b.x} ${b.y}`;
   }
   if (fromId === 'gardener' && toId === 'weaving') {
-    return `M ${a.x} ${a.y} C ${a.x - 140} ${a.y + 600}, ${b.x - 200} ${b.y - 500}, ${b.x} ${b.y}`;
+    return `M ${a.x} ${a.y} C ${a.x - 120} ${a.y + 480}, ${b.x - 160} ${b.y - 420}, ${b.x} ${b.y}`;
   }
   const midX = Math.max(a.x, b.x) + 150;
   const midY = (a.y + b.y) / 2;

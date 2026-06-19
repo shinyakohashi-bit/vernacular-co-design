@@ -31,15 +31,25 @@ export default function RiverMap({ onSelect, selectedId }: Props) {
   const fitToView = useCallback(() => {
     if (!svgRef.current) return;
     const { width, height } = svgRef.current.getBoundingClientRect();
-    const sx = width / canvas.width;
-    const sy = height / canvas.height;
-    const s = Math.min(sx, sy) * 0.88;
+    const pad = 80;
+    const allPositions = NODES.map(n => getNodePosition(n.id));
+    const estPt = getEstuary();
+    allPositions.push(estPt);
+    const minX = Math.min(...allPositions.map(p => p.x)) - pad;
+    const minY = Math.min(...allPositions.map(p => p.y)) - pad;
+    const maxX = Math.max(...allPositions.map(p => p.x)) + pad;
+    const maxY = Math.max(...allPositions.map(p => p.y)) + pad;
+    const contentW = maxX - minX;
+    const contentH = maxY - minY;
+    const s = Math.min(width / contentW, height / contentH) * 0.92;
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
     setTransform({
       scale: s,
-      x: (width - canvas.width * s) / 2,
-      y: (height - canvas.height * s) / 2 + 20,
+      x: width / 2 - cx * s,
+      y: height / 2 - cy * s,
     });
-  }, [canvas.width, canvas.height]);
+  }, []);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if ((e.target as Element).closest('.node-hit')) return;
@@ -263,38 +273,47 @@ function NodeMarker({ node, selected, onSelect }: { node: RiverNode; selected: b
   const color = themeColor(node.theme);
   const isMain = node.kind === 'main' || node.kind === 'source';
   const r = isMain ? 10 : 7;
-  const labelSide = pos.x > 950 ? 'left' : 'right';
+  const labelSide = pos.x > 800 ? 'left' : 'right';
   const labelX = labelSide === 'right' ? pos.x + r + 12 : pos.x - r - 12;
   const anchor = labelSide === 'right' ? 'start' : 'end';
 
-  const handleClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    onSelect(selected ? null : node);
-  }, [selected, node, onSelect]);
+  const hitRef = useRef<SVGCircleElement>(null);
 
-  const handleKey = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
+  useEffect(() => {
+    const el = hitRef.current;
+    if (!el) return;
+    const onClick = (e: Event) => {
+      e.stopPropagation();
       onSelect(selected ? null : node);
-    }
+    };
+    const onKeyDown = (e: Event) => {
+      const ke = e as KeyboardEvent;
+      if (ke.key === 'Enter' || ke.key === ' ') {
+        ke.preventDefault();
+        onSelect(selected ? null : node);
+      }
+    };
+    el.addEventListener('click', onClick);
+    el.addEventListener('keydown', onKeyDown);
+    return () => {
+      el.removeEventListener('click', onClick);
+      el.removeEventListener('keydown', onKeyDown);
+    };
   }, [selected, node, onSelect]);
 
   return (
-    <g className={`node-hit ${selected ? 'selected' : ''}`} pointerEvents="bounding-box">
+    <g className={`node-hit ${selected ? 'selected' : ''}`}>
       {selected && (
         <circle cx={pos.x} cy={pos.y} r={r + 10} fill={color} opacity="0.12" className="node-halo" />
       )}
-      {/* Invisible hit area */}
       <circle
-        cx={pos.x} cy={pos.y} r={isMain ? 24 : 18}
-        fill="transparent"
-        stroke="none"
+        ref={hitRef}
+        cx={pos.x} cy={pos.y} r={isMain ? 28 : 22}
+        fill="transparent" stroke="none"
         style={{ cursor: 'pointer' }}
-        onClick={handleClick}
-        onKeyDown={handleKey}
-        tabIndex={0}
-        role="button"
+        tabIndex={0} role="button"
         aria-label={`${node.no} ${node.title}`}
+        pointerEvents="all"
       />
       <circle cx={pos.x} cy={pos.y} r={r}
         fill="#f8f5ec" stroke={color} strokeWidth={isMain ? 2 : 1.5} pointerEvents="none" />
