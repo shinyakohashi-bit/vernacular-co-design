@@ -37,13 +37,13 @@ const diagPerp = { x: -diagDir.y, y: diagDir.x };
 // 対角線に直交する向きへの蛇行量（決定論的・非対称）。
 // 端（源流・河口）は包絡線で静め、中間で振らせる。
 function meander(u: number): number {
-  const env = 0.30 + 0.70 * Math.sin(Math.PI * u);
+  // 端も少しは振れるよう包絡線の底上げを大きめに。
+  const env = 0.45 + 0.55 * Math.sin(Math.PI * u);
   return (
     env *
-    (158 * Math.sin(1.22 * Math.PI * u + 0.65) +
-      82 * Math.sin(2.85 * Math.PI * u + 2.35) -
-      44 * Math.sin(5.1 * Math.PI * u + 4.1) +
-      26 * Math.sin(8.3 * Math.PI * u + 1.2))
+    (360 * Math.sin(2.7 * Math.PI * u + 0.5) +
+      150 * Math.sin(4.9 * Math.PI * u + 2.3) +
+      72 * Math.sin(7.6 * Math.PI * u + 4.1))
   );
 }
 
@@ -157,9 +157,12 @@ const TRIBS: Record<string, TribLayout> = {};
       const side = rng() < 0.5 ? -1 : 1;
       const outward = { x: perp.x * side, y: perp.y * side };
 
-      // 支流ごとに長さ・進入角・湾曲を散らす
-      const sideDist = 200 + rng() * 180;   // 本流から離す距離
-      const upDist = 130 + rng() * 170;      // 上流方向へのオフセット（浅い進入角を作る）
+      // 支流ごとに長さのメリハリ（歪んだ分布で短い〜長いを散らす）
+      let reach = 150 + Math.pow(rng(), 2.0) * 560;   // ≈150〜710（短め寄り・メリハリ）
+      if (m.id === 'toolview') reach = 880;           // 支流7は際立って長い支流に
+      const theta = 0.28 + rng() * 0.78;              // 進入の傾き（小＝横向き／大＝上流寄り）
+      const sideDist = reach * Math.cos(theta);       // 本流から離す距離
+      const upDist = reach * Math.sin(theta) + 60;    // 上流方向へのオフセット（浅い進入角）
       const curve = 0.30 + rng() * 0.55;
 
       // 源頭（支流ノード）は上流側かつ岸の外側に置く
@@ -168,12 +171,19 @@ const TRIBS: Record<string, TribLayout> = {};
         y: join.y + outward.y * sideDist - tan.y * upDist,
       };
 
+      // head→join に沿った蛇行（長い支流ほど大きく曲げ、川らしく）
+      const hjx = join.x - head.x, hjy = join.y - head.y;
+      const hjl = Math.hypot(hjx, hjy) || 1;
+      const perpHJ = { x: -hjy / hjl, y: hjx / hjl };
+      const windSign = rng() < 0.5 ? -1 : 1;
+      const wind = reach * (0.10 + rng() * 0.14) * windSign;
+
       // 合流点での接線が本流の下流向き（tan）に近づくよう制御点を取る
-      const handle = upDist * (0.55 + curve * 0.4);
+      const handle = Math.min(upDist, 260) * (0.55 + curve * 0.4);
       const cp2 = { x: join.x - tan.x * handle, y: join.y - tan.y * handle };
       const cp1 = {
-        x: head.x + (join.x - head.x) * 0.32 + outward.x * sideDist * 0.18 * curve,
-        y: head.y + (join.y - head.y) * 0.32 + outward.y * sideDist * 0.18 * curve,
+        x: head.x + hjx * 0.36 + perpHJ.x * wind,
+        y: head.y + hjy * 0.36 + perpHJ.y * wind,
       };
 
       const path = `M ${head.x.toFixed(1)} ${head.y.toFixed(1)} C ${cp1.x.toFixed(1)} ${cp1.y.toFixed(1)}, ${cp2.x.toFixed(1)} ${cp2.y.toFixed(1)}, ${join.x.toFixed(1)} ${join.y.toFixed(1)}`;

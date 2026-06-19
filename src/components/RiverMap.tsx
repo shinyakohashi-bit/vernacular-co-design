@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { NODES, MAIN_ORDER, SUBTERRANEAN } from '../data/nodes';
 import {
   getNodePosition,
@@ -28,28 +28,37 @@ export default function RiverMap({ onSelect, selectedId }: Props) {
   const dragging = useRef(false);
   const moved = useRef(false);
   const lastPt = useRef({ x: 0, y: 0 });
+  const labelsRef = useRef<LabelBox[]>([]);
 
   const fitToView = useCallback(() => {
     if (!svgRef.current) return;
     const { width, height } = svgRef.current.getBoundingClientRect();
     const b = getContentBounds();
-    const pad = 120;
-    const cw = b.maxX - b.minX + pad * 2;
-    const ch = b.maxY - b.minY + pad * 2;
+    // 大きなラベルもはみ出さないよう、ラベルのピル箱も含めて枠を取る
+    let minX = b.minX, maxX = b.maxX, minY = b.minY, maxY = b.maxY;
+    for (const l of labelsRef.current) {
+      minX = Math.min(minX, l.pillX);
+      maxX = Math.max(maxX, l.pillX + l.w);
+      minY = Math.min(minY, l.cy - l.h / 2);
+      maxY = Math.max(maxY, l.cy + l.h / 2);
+    }
+    const pad = 60;
+    const cw = maxX - minX + pad * 2;
+    const ch = maxY - minY + pad * 2;
     const fit = Math.min(width / cw, height / ch);
     // ノードが小さくなりすぎてタップ不能にならないよう下限を設ける
-    const MIN_SCALE = 0.3;
+    const MIN_SCALE = 0.26;
     const s = Math.max(fit, MIN_SCALE);
 
     if (s <= fit + 1e-6) {
       // 全体が収まる（デスクトップ等）：中央に配置
-      const cx = (b.minX + b.maxX) / 2;
-      const cy = (b.minY + b.maxY) / 2;
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
       setTransform({ scale: s, x: width / 2 - cx * s, y: height / 2 - cy * s });
     } else {
       // 収まらない（狭い画面）：源流を左上寄りに置き、下流へ辿れるように
       const src = getSourcePoint();
-      setTransform({ scale: s, x: width * 0.22 - src.x * s, y: height * 0.16 - src.y * s });
+      setTransform({ scale: s, x: width * 0.24 - src.x * s, y: height * 0.14 - src.y * s });
     }
   }, []);
 
@@ -98,13 +107,21 @@ export default function RiverMap({ onSelect, selectedId }: Props) {
     ? SUBTERRANEAN.filter(s => s.from === selectedId || s.to === selectedId).flatMap(s => [s.from, s.to])
     : [];
 
-  const mainNodes = MAIN_ORDER.map(id => NODES.find(n => n.id === id)!);
-  const sideTributaries = NODES.filter(n => n.kind === 'tributary');
-  const sourceNode = NODES.find(n => n.kind === 'source')!;
-  const eddyNode = NODES.find(n => n.kind === 'eddy')!;
   const estuary = getEstuary();
-  const source = getSourcePoint();
   const eddy = getEddy();
+  const sideTributaries = NODES.filter(n => n.kind === 'tributary');
+
+  // ラベルのレイアウト（測定→縦方向の衝突回避）は配置に依存し選択状態に依存しない
+  const labels = useMemo(() => {
+    const metas: { node: RiverNode; big: boolean }[] = [
+      // MAIN_ORDER は源流（nagomi）＋本流3つを含む
+      ...MAIN_ORDER.map(id => ({ node: NODES.find(n => n.id === id)!, big: true })),
+      { node: NODES.find(n => n.kind === 'eddy')!, big: false },
+      ...NODES.filter(n => n.kind === 'tributary').map(n => ({ node: n, big: false })),
+    ];
+    return computeLabels(metas);
+  }, []);
+  labelsRef.current = labels;
 
   return (
     <svg
@@ -235,19 +252,16 @@ export default function RiverMap({ onSelect, selectedId }: Props) {
           );
         })}
 
-        {/* ノード（支流→本流→源流→淵の順で重ね、本流を前面に） */}
-        {sideTributaries.map(n => (
-          <NodeMarker key={n.id} node={n} pos={getNodePosition(n.id)} dir={getLabelDir(n.id)}
-            selected={selectedId === n.id} onSelect={onSelect} />
+        {/* ラベル層（衝突回避済み・ピルで線/川から抜く） */}
+        {labels.map(b => (
+          <LabelView key={`lbl-${b.node.id}`} box={b} selected={selectedId === b.node.id} />
         ))}
-        <NodeMarker node={eddyNode} pos={getNodePosition('takeno')} dir={getLabelDir('takeno')}
-          selected={selectedId === 'takeno'} onSelect={onSelect} />
-        {mainNodes.map(n => (
-          <NodeMarker key={n.id} node={n} pos={getNodePosition(n.id)} dir={getLabelDir(n.id)}
-            selected={selectedId === n.id} onSelect={onSelect} big />
+
+        {/* ノード層（円＋当たり判定） */}
+        {labels.map(b => (
+          <NodeDot key={`dot-${b.node.id}`} node={b.node} pos={b.pos} big={b.big}
+            selected={selectedId === b.node.id} onSelect={onSelect} />
         ))}
-        <NodeMarker node={sourceNode} pos={source} dir={getLabelDir('nagomi')}
-          selected={selectedId === 'nagomi'} onSelect={onSelect} big />
 
         {/* 河口「これから」 */}
         <text x={estuary.x + 40} y={estuary.y + 56} textAnchor="start"
@@ -265,16 +279,139 @@ export default function RiverMap({ onSelect, selectedId }: Props) {
   );
 }
 
-interface MarkerProps {
+// ── ラベルレイアウト ─────────────────────────────────────────────────────
+interface LabelBox {
   node: RiverNode;
   pos: { x: number; y: number };
   dir: { x: number; y: number };
-  selected: boolean;
-  big?: boolean;
-  onSelect: (n: RiverNode | null) => void;
+  big: boolean;
+  r: number;
+  lx: number;          // ラベルの取り付け点X（固定）
+  cy: number;          // ピル中心Y（衝突回避で動く）
+  anchor: 'start' | 'end';
+  isSource: boolean;
+  titleSize: number;
+  eyeSize: number;
+  lineH: number;
+  lines: string[];
+  w: number;
+  h: number;
+  pillX: number;
+  padX: number;
+  padY: number;
+  color: string;
 }
 
-function NodeMarker({ node, pos, dir, selected, big, onSelect }: MarkerProps) {
+const charW = (s: string, fs: number) =>
+  [...s].reduce((sum, ch) => sum + (/[\x00-\xff]/.test(ch) ? fs * 0.56 : fs), 0);
+
+// タイトルを単位幅で折り返す（CJK=1／英数=0.5）。読点・中黒の後で切れやすくする。
+function wrapTitle(text: string, maxUnits: number): string[] {
+  const lines: string[] = [];
+  let cur = '', units = 0;
+  for (const ch of text) {
+    const w = /[\x00-\xff]/.test(ch) ? 0.5 : 1;
+    cur += ch; units += w;
+    const breakable = /[、。，・／」）]/.test(ch) || ch === ' ';
+    if (units >= maxUnits && breakable) { lines.push(cur); cur = ''; units = 0; }
+  }
+  if (cur) lines.push(cur);
+  const out: string[] = [];
+  for (const ln of lines) {
+    let u = 0, seg = '';
+    for (const ch of ln) {
+      const w = /[\x00-\xff]/.test(ch) ? 0.5 : 1;
+      if (u + w > maxUnits + 2.5 && seg) { out.push(seg); seg = ''; u = 0; }
+      seg += ch; u += w;
+    }
+    if (seg) out.push(seg);
+  }
+  return out.length ? out : [text];
+}
+
+// 全ラベルを測定し、縦方向の重なりを反復的に解消する
+function computeLabels(metas: { node: RiverNode; big: boolean }[]): LabelBox[] {
+  const boxes: LabelBox[] = metas.map(({ node, big }) => {
+    const pos = getNodePosition(node.id);
+    const dir = getLabelDir(node.id);
+    const r = big ? 11 : 7;
+    const gap = r + 22;
+    const lx = pos.x + dir.x * gap;
+    const cy = pos.y + dir.y * gap;
+    const anchor: 'start' | 'end' = dir.x >= 0 ? 'start' : 'end';
+    const isSource = node.kind === 'source';
+    const titleSize = big ? 56 : 48;
+    const eyeSize = 34;
+    const lineH = titleSize * 1.16;
+    const lines = wrapTitle(node.title.replace('\n', ' '), 8);
+    const padX = 18, padY = 14;
+    const maxLineW = Math.max(...lines.map(l => charW(l, titleSize)));
+    const eyeW = isSource ? charW('源流', eyeSize) : 0;
+    const w = Math.max(maxLineW, eyeW) + padX * 2;
+    const h = (isSource ? eyeSize + 8 : 0) + lines.length * lineH + padY * 2;
+    const pillX = anchor === 'start' ? lx - 10 : lx - w + 10;
+    return {
+      node, pos, dir, big, r, lx, cy, anchor, isSource,
+      titleSize, eyeSize, lineH, lines, w, h, pillX, padX, padY,
+      color: themeColor(node.theme),
+    };
+  });
+
+  // 反復分離（縦方向のみ。横位置＝岸の左右は保持）
+  for (let pass = 0; pass < 12; pass++) {
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i], b = boxes[j];
+        const ox = Math.min(a.pillX + a.w, b.pillX + b.w) - Math.max(a.pillX, b.pillX);
+        const oy = Math.min(a.cy + a.h / 2, b.cy + b.h / 2) - Math.max(a.cy - a.h / 2, b.cy - b.h / 2);
+        if (ox > -8 && oy > 0) {
+          const push = oy / 2 + 3;
+          if (a.cy <= b.cy) { a.cy -= push; b.cy += push; }
+          else { a.cy += push; b.cy -= push; }
+        }
+      }
+    }
+  }
+  return boxes;
+}
+
+// ラベル本体（衝突回避済みの座標で描画。クリックは受けない）
+function LabelView({ box, selected }: { box: LabelBox; selected: boolean }) {
+  const { pos, dir, r, lx, cy, anchor, isSource, titleSize, eyeSize, lineH, lines, w, h, pillX, padX, padY, color } = box;
+  const pillY = cy - h / 2;
+  const textX = anchor === 'start' ? pillX + padX : pillX + w - padX;
+  const eyeBaseline = pillY + padY + eyeSize;
+  const linesTop = pillY + padY + (isSource ? eyeSize + 8 : 0);
+  const lineBaselines = lines.map((_, i) => linesTop + i * lineH + titleSize * 0.82);
+
+  return (
+    <g pointerEvents="none" opacity={selected ? 1 : 0.97}>
+      {/* 連結線（ノード→ラベル） */}
+      <line x1={pos.x + dir.x * r} y1={pos.y + dir.y * r} x2={lx} y2={cy}
+        stroke={color} strokeWidth="1" opacity="0.28" />
+      <rect x={pillX} y={pillY} width={w} height={h} rx="10"
+        fill="#f1ede3" opacity={selected ? 0.98 : 0.86} />
+      {isSource && (
+        <text x={textX} y={eyeBaseline} textAnchor={anchor} fontSize={eyeSize}
+          fontFamily="var(--font-sans)" fill={color} fontWeight="700" letterSpacing="3px">
+          源流
+        </text>
+      )}
+      {lines.map((ln, i) => (
+        <text key={i} x={textX} y={lineBaselines[i]} textAnchor={anchor} fontSize={titleSize}
+          fontFamily="var(--font-serif)" fill="#2c2a26" fontWeight="500">
+          {ln}
+        </text>
+      ))}
+    </g>
+  );
+}
+
+// ノードの円＋当たり判定
+function NodeDot({ node, pos, big, selected, onSelect }: {
+  node: RiverNode; pos: { x: number; y: number }; big: boolean;
+  selected: boolean; onSelect: (n: RiverNode | null) => void;
+}) {
   const color = themeColor(node.theme);
   const r = big ? 11 : 7;
   const hitRef = useRef<SVGCircleElement>(null);
@@ -292,58 +429,14 @@ function NodeMarker({ node, pos, dir, selected, big, onSelect }: MarkerProps) {
     return () => { el.removeEventListener('click', onClick); el.removeEventListener('keydown', onKeyDown); };
   }, [selected, node, onSelect]);
 
-  // ラベルは外向きに逃がす。水平成分で左右、垂直成分で上下を決める。
-  const gap = r + 14;
-  const lx = pos.x + dir.x * gap;
-  const ly = pos.y + dir.y * gap;
-  const anchor: 'start' | 'end' = dir.x >= 0 ? 'start' : 'end';
-
-  const titleText = node.title.replace('\n', ' ');
-  const noSize = big ? 15 : 13;
-  const titleSize = big ? 16 : 13;
-
-  // washi ピルの寸法見積り（CJKは約 fontSize 幅／英数は約 0.55）
-  const charW = (s: string, fs: number) =>
-    [...s].reduce((sum, ch) => sum + (/[\x00-\xff]/.test(ch) ? fs * 0.56 : fs), 0);
-  const noW = charW(node.no, noSize);
-  const titleW = charW(titleText, titleSize);
-  const pillW = Math.max(noW, titleW) + 20;
-  const pillH = noSize + titleSize + 20;
-  const pillX = anchor === 'start' ? lx - 8 : lx - pillW + 8;
-  const pillY = ly - pillH / 2;
-
   return (
     <g className="node-hit">
       {selected && (
         <circle cx={pos.x} cy={pos.y} r={r + 11} fill={color} opacity="0.14" className="node-halo" />
       )}
-
-      {/* ラベル（washi ピルで線・川から抜く） */}
-      <g opacity={selected ? 1 : 0.96} pointerEvents="none">
-        <rect x={pillX} y={pillY} width={pillW} height={pillH} rx="7"
-          fill="#f1ede3" opacity={selected ? 0.96 : 0.82} />
-        <text x={anchor === 'start' ? pillX + 10 : pillX + pillW - 10} y={pillY + noSize + 4}
-          textAnchor={anchor} fontSize={noSize} fontFamily="var(--font-sans)"
-          fill={color} fontWeight="700" letterSpacing="0.5px">
-          {node.no}
-        </text>
-        <text x={anchor === 'start' ? pillX + 10 : pillX + pillW - 10} y={pillY + noSize + titleSize + 10}
-          textAnchor={anchor} fontSize={titleSize} fontFamily="var(--font-serif)"
-          fill="#2c2a26">
-          {titleText}
-        </text>
-      </g>
-
-      {/* 連結線（ノード→ラベル） */}
-      <line x1={pos.x + dir.x * r} y1={pos.y + dir.y * r} x2={lx} y2={ly}
-        stroke={color} strokeWidth="0.8" opacity="0.35" pointerEvents="none" />
-
-      {/* 当たり判定（透明・大きめ） */}
-      <circle ref={hitRef} cx={pos.x} cy={pos.y} r={big ? 26 : 20}
+      <circle ref={hitRef} cx={pos.x} cy={pos.y} r={big ? 30 : 24}
         fill="transparent" stroke="none" style={{ cursor: 'pointer' }}
-        tabIndex={0} role="button" aria-label={`${node.no} ${titleText}`} pointerEvents="all" />
-
-      {/* ノード本体 */}
+        tabIndex={0} role="button" aria-label={`${node.no} ${node.title.replace('\n', ' ')}`} pointerEvents="all" />
       <circle cx={pos.x} cy={pos.y} r={r} fill="#f8f5ec" stroke={color} strokeWidth={big ? 2.4 : 1.6} pointerEvents="none" />
       {node.kind === 'source' && (
         <>
