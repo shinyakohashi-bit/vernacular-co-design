@@ -1,0 +1,60 @@
+.river-map {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+  user-select: none;
+}
+.river-map:active {
+  cursor: grabbing;
+}
+
+@keyframes flowDown {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -200; }
+}
+
+@keyframes eddySpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.node-hit {
+  outline: none;
+}
+.node-hit:focus-visible circle:first-of-type,
+.node-hit:focus circle:first-of-type {
+  stroke-width: 3;
+}
+.node-hit:hover circle {
+  transform-origin: var(--cx, 50%) var(--cy, 50%);
+}
+.node-hit:hover {
+  filter: brightness(1.05);
+}
+
+.node-halo {
+  animation: haloFade 1.5s ease-in-out infinite alternate;
+}
+@keyframes haloFade {
+  from { opacity: 0.1; }
+  to { opacity: 0.2; }
+}
+
+.subterranean-line,
+.subterranean-label {
+  transition: opacity 0.4s ease;
+}
+
+.tributary-fill {
+  transition: opacity 0.3s ease;
+}
+
+.fit-btn {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+.fit-btn:hover {
+  opacity: 1;
+}

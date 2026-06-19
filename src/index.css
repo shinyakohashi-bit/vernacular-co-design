@@ -1,0 +1,39 @@
+:root {
+  --washi: #f1ede3;
+  --washi-card: #f8f5ec;
+  --ink: #2c2a26;
+  --ink-soft: #6f6a5e;
+  --water: #6f9bb0;
+  --water-deep: #4f7e95;
+  --water-light: #c2d6df;
+  --amber: #c2954a;
+  --sage: #7e9069;
+  --teal: #5f8f86;
+  --terra: #b5654a;
+  --eddy: #8a7a5e;
+
+  --font-serif: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
+  --font-sans: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--washi);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .river-flow-anim {
+    animation: none !important;
+  }
+}
