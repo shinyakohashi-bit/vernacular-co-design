@@ -72,7 +72,7 @@ export const NODES: RiverNode[] = [
     note: 'https://note.com/kohakocher/n/n4623cfaf3fc1',
   },
   {
-    id: 'minamata', kind: 'tributary', theme: 'field', no: '支流5', joinsAt: 'weaving',
+    id: 'minamata', kind: 'tributary', theme: 'field', no: '支流5', joinsAt: 'drift',
     title: '水俣フィールドワーク', sub: '支流 ／ 熊本県・水俣',
     summary: '汚染された海を埋め立てた地に立つ水俣で、原料を種から育てる紙漉き工房に出会う。「アクターの翻訳」だけでは近代と土着を分けられない——その原点をブラックボックス化せず〈つなぎとめる〉ことこそが両者を分かつ、という気づきが生まれた。',
     question: '「アクターの翻訳」という観点だけでは、庭師的なデザインと建築家的なデザインの本質を説明しきれない。',
@@ -106,7 +106,7 @@ export const NODES: RiverNode[] = [
     summary: 'デザイナーの「役割（Doing）」から「あり方（Being）」へ。一人の中に建築家（目的主導・計画と制御）と庭師（場所主導・応答とケア）のモードが動的に共存し、状況に応じて織りなされる存在として捉え直す。',
   },
   {
-    id: 'watershed', kind: 'tributary', theme: 'watershed', no: '支流11', joinsAt: 'nagomi',
+    id: 'watershed', kind: 'tributary', theme: 'watershed', no: '支流11', joinsAt: 'estuary',
     title: '流域思考', sub: '支流 ／ 先行研究（岸由二）',
     summary: '岸由二が提唱する、足もとの大地を行政区ではなく「流域」という集水地形＝生態系の単位で捉え直す思想。このリサーチ全体を「流域」として描く見立てそのものの源泉であり、入れ子状に編み合う水の構造を与える。',
   },
