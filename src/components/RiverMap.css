@@ -9,14 +9,23 @@
   cursor: grabbing;
 }
 
-@keyframes flowDown {
-  from { stroke-dashoffset: 0; }
-  to { stroke-dashoffset: -200; }
-}
-
 @keyframes eddySpin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* ドリフト：水面の中を流れる光（源流側→下流側へ漂う） */
+@keyframes driftFlow {
+  from { transform: translate(-220px, -30px); }
+  to   { transform: translate(980px, 90px); }
+}
+.drift-blob {
+  animation-name: driftFlow;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .drift-blob { animation: none; opacity: 0; }
 }
 
 .node-hit {
@@ -39,15 +48,6 @@
 @keyframes haloFade {
   from { opacity: 0.1; }
   to { opacity: 0.2; }
-}
-
-.subterranean-line,
-.subterranean-label {
-  transition: opacity 0.4s ease;
-}
-
-.tributary-fill {
-  transition: opacity 0.3s ease;
 }
 
 .fit-btn {
