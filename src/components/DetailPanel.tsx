@@ -1,5 +1,6 @@
 import type { RiverNode } from '../data/nodes';
-import { themeColor, themeLabel } from '../utils/theme';
+import { themeLabel } from '../utils/theme';
+import { getNodeColor } from '../data/layout';
 import './DetailPanel.css';
 
 interface Props {
@@ -10,7 +11,7 @@ interface Props {
 export default function DetailPanel({ node, onClose }: Props) {
   if (!node) return null;
 
-  const color = themeColor(node.theme);
+  const color = getNodeColor(node.id);
 
   return (
     <div className="detail-overlay" onClick={onClose}>

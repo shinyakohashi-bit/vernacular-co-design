@@ -2,13 +2,13 @@ import { useRef, useState, useCallback, useEffect } from 'react';
 import { NODES, MAIN_ORDER } from '../data/nodes';
 import {
   getNodePosition,
+  getNodeColor,
   getLabel,
   getWaterPaths,
   getContentBounds,
   getEddyPos,
   getSourcePos,
 } from '../data/layout';
-import { themeColor } from '../utils/theme';
 import type { RiverNode } from '../data/nodes';
 import './RiverMap.css';
 
@@ -21,17 +21,18 @@ const WATER_PATHS = getWaterPaths();
 
 // ドリフトのシマー（流れる光）が辿るレーン。源流側（左上）→下流側へ漂わせる。
 const DRIFT_BLOBS = [
-  { y: 110, dur: 19, delay: 0 },
-  { y: 180, dur: 24, delay: -6 },
-  { y: 235, dur: 21, delay: -12 },
-  { y: 300, dur: 26, delay: -3 },
-  { y: 200, dur: 22, delay: -16 },
-  { y: 330, dur: 28, delay: -9 },
+  { y: 175, dur: 19, delay: 0 },
+  { y: 245, dur: 24, delay: -6 },
+  { y: 300, dur: 21, delay: -12 },
+  { y: 360, dur: 26, delay: -3 },
+  { y: 410, dur: 22, delay: -16 },
+  { y: 460, dur: 28, delay: -9 },
 ];
 
 export default function RiverMap({ onSelect, selectedId }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
+  const [size, setSize] = useState({ w: 0, h: 0 });
   const dragging = useRef(false);
   const moved = useRef(false);
   const lastPt = useRef({ x: 0, y: 0 });
@@ -39,6 +40,7 @@ export default function RiverMap({ onSelect, selectedId }: Props) {
   const fitToView = useCallback(() => {
     if (!svgRef.current) return;
     const { width, height } = svgRef.current.getBoundingClientRect();
+    setSize({ w: width, h: height });
     const b = getContentBounds();
     const pad = 40;
     const cw = b.maxX - b.minX + pad * 2;
@@ -182,10 +184,11 @@ export default function RiverMap({ onSelect, selectedId }: Props) {
         ))}
       </g>
 
-      {/* 全体表示ボタン */}
-      <g className="fit-btn" onClick={fitToView} role="button" tabIndex={0} aria-label="全体を表示">
-        <rect x="16" y="16" width="40" height="40" rx="8" fill="#f8f5ec" stroke="#6f6a5e" strokeWidth="0.6" opacity="0.85" />
-        <text x="36" y="42" textAnchor="middle" fontSize="18" fill="#6f6a5e">⊞</text>
+      {/* 全体表示ボタン（右下：タイトル・凡例と重ならないように） */}
+      <g className="fit-btn" onClick={fitToView} role="button" tabIndex={0} aria-label="全体を表示"
+        transform={`translate(${Math.max(16, size.w - 56)}, ${Math.max(16, size.h - 56)})`}>
+        <rect x="0" y="0" width="40" height="40" rx="8" fill="#f8f5ec" stroke="#6f6a5e" strokeWidth="0.6" opacity="0.85" />
+        <text x="20" y="26" textAnchor="middle" fontSize="18" fill="#6f6a5e">⊞</text>
       </g>
     </svg>
   );
@@ -201,7 +204,7 @@ interface MarkerProps {
 const LABEL_FS = 9.5;
 
 function NodeMarker({ node, big, selected, onSelect }: MarkerProps) {
-  const color = themeColor(node.theme);
+  const color = getNodeColor(node.id);
   const pos = getNodePosition(node.id);
   const label = getLabel(node.id);
   const r = node.kind === 'source' ? 6.5 : big ? 5.5 : 4.2;
@@ -266,17 +269,16 @@ function NodeMarker({ node, big, selected, onSelect }: MarkerProps) {
         tabIndex={0} role="button"
         aria-label={node.title} pointerEvents="all" />
 
-      {/* ノード本体 */}
-      <circle cx={pos.x} cy={pos.y} r={r} fill="#f8f5ec" stroke={color}
-        strokeWidth={big ? 1.8 : 1.3} pointerEvents="none" />
+      {/* 源流：起点を示す同色の外輪 */}
       {node.kind === 'source' && (
-        <>
-          <circle cx={pos.x} cy={pos.y} r={r + 3.5} fill="none" stroke="#c2954a" strokeWidth="1.1" opacity="0.7" pointerEvents="none" />
-          <circle cx={pos.x} cy={pos.y} r={2.6} fill="#c2954a" pointerEvents="none" />
-        </>
+        <circle cx={pos.x} cy={pos.y} r={r + 3.2} fill="none" stroke={color} strokeWidth="1.1" opacity="0.55" pointerEvents="none" />
       )}
+
+      {/* ノード本体（SVGの色を踏襲した塗り＋白フチ＝凡例と一致） */}
+      <circle cx={pos.x} cy={pos.y} r={r} fill={color} stroke="#fff"
+        strokeWidth={big ? 1.4 : 1.1} pointerEvents="none" />
       {node.kind === 'eddy' && (
-        <circle cx={pos.x} cy={pos.y} r={2} fill="#7a6c52" pointerEvents="none" />
+        <circle cx={pos.x} cy={pos.y} r={1.6} fill="#fff" opacity="0.8" pointerEvents="none" />
       )}
     </g>
   );
