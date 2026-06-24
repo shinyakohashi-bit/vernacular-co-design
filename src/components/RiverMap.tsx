@@ -29,13 +29,33 @@ const DRIFT_BLOBS = [
   { y: 460, dur: 28, delay: -9 },
 ];
 
+const SCALE_MIN = 0.4;
+const SCALE_MAX = 6;
+type TForm = { x: number; y: number; scale: number };
+
 export default function RiverMap({ onSelect, selectedId }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
+  const [transform, setTransform] = useState<TForm>({ x: 0, y: 0, scale: 1 });
+  const transformRef = useRef(transform);
   const [size, setSize] = useState({ w: 0, h: 0 });
-  const dragging = useRef(false);
   const moved = useRef(false);
   const lastPt = useRef({ x: 0, y: 0 });
+  // マルチタッチ管理（地図上だけでピンチズーム／2本指パン）
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ dist: number; mid: { x: number; y: number }; start: TForm } | null>(null);
+
+  const setT = useCallback((u: TForm | ((t: TForm) => TForm)) => {
+    setTransform(prev => {
+      const next = typeof u === 'function' ? (u as (t: TForm) => TForm)(prev) : u;
+      transformRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const localPoint = useCallback((cx: number, cy: number) => {
+    const r = svgRef.current!.getBoundingClientRect();
+    return { x: cx - r.left, y: cy - r.top };
+  }, []);
 
   const fitToView = useCallback(() => {
     if (!svgRef.current) return;
@@ -52,13 +72,13 @@ export default function RiverMap({ onSelect, selectedId }: Props) {
     if (s <= fit + 1e-6) {
       const cx = (b.minX + b.maxX) / 2;
       const cy = (b.minY + b.maxY) / 2;
-      setTransform({ scale: s, x: width / 2 - cx * s, y: height / 2 - cy * s });
+      setT({ scale: s, x: width / 2 - cx * s, y: height / 2 - cy * s });
     } else {
       // 収まらない狭い画面：源流（左上）を起点に置き、下流へ辿れるように
       const src = getSourcePos();
-      setTransform({ scale: s, x: width * 0.22 - src.x * s, y: height * 0.18 - src.y * s });
+      setT({ scale: s, x: width * 0.22 - src.x * s, y: height * 0.18 - src.y * s });
     }
-  }, []);
+  }, [setT]);
 
   useEffect(() => { fitToView(); }, [fitToView]);
   useEffect(() => {
@@ -67,39 +87,90 @@ export default function RiverMap({ onSelect, selectedId }: Props) {
     return () => window.removeEventListener('resize', onResize);
   }, [fitToView]);
 
+  // iOS Safari のページ・ピンチズーム（モーダルごと拡大）を地図上で抑止
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const prevent = (e: Event) => e.preventDefault();
+    el.addEventListener('gesturestart', prevent);
+    el.addEventListener('gesturechange', prevent);
+    el.addEventListener('gestureend', prevent);
+    return () => {
+      el.removeEventListener('gesturestart', prevent);
+      el.removeEventListener('gesturechange', prevent);
+      el.removeEventListener('gestureend', prevent);
+    };
+  }, []);
+
+  const beginPinch = useCallback(() => {
+    const pts = [...pointers.current.values()];
+    if (pts.length < 2) return;
+    const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    const mid = localPoint((pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2);
+    pinch.current = { dist, mid, start: { ...transformRef.current } };
+  }, [localPoint]);
+
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if ((e.target as Element).closest('.node-hit')) return;
-    dragging.current = true;
-    moved.current = false;
-    lastPt.current = { x: e.clientX, y: e.clientY };
-  }, []);
+    try { svgRef.current?.setPointerCapture(e.pointerId); } catch { /* noop */ }
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 1) {
+      moved.current = false;
+      lastPt.current = { x: e.clientX, y: e.clientY };
+    } else if (pointers.current.size === 2) {
+      beginPinch();
+    }
+  }, [beginPinch]);
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragging.current) return;
-    const dx = e.clientX - lastPt.current.x;
-    const dy = e.clientY - lastPt.current.y;
-    if (Math.abs(dx) + Math.abs(dy) > 3) moved.current = true;
-    lastPt.current = { x: e.clientX, y: e.clientY };
-    setTransform(t => ({ ...t, x: t.x + dx, y: t.y + dy }));
-  }, []);
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-  const onPointerUp = useCallback(() => { dragging.current = false; }, []);
+    if (pointers.current.size >= 2 && pinch.current) {
+      const pts = [...pointers.current.values()].slice(0, 2);
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const mid = localPoint((pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2);
+      const p = pinch.current;
+      const ns = Math.max(SCALE_MIN, Math.min(SCALE_MAX, p.start.scale * (dist / (p.dist || 1))));
+      // ピンチ開始時に中心の下にあったワールド座標を、現在の中心へ合わせる（ズーム＋2本指パン）
+      const wx = (p.mid.x - p.start.x) / p.start.scale;
+      const wy = (p.mid.y - p.start.y) / p.start.scale;
+      moved.current = true;
+      setT({ scale: ns, x: mid.x - wx * ns, y: mid.y - wy * ns });
+      return;
+    }
+
+    if (pointers.current.size === 1) {
+      const dx = e.clientX - lastPt.current.x;
+      const dy = e.clientY - lastPt.current.y;
+      if (Math.abs(dx) + Math.abs(dy) > 3) moved.current = true;
+      lastPt.current = { x: e.clientX, y: e.clientY };
+      setT(t => ({ ...t, x: t.x + dx, y: t.y + dy }));
+    }
+  }, [localPoint, setT]);
+
+  const onPointerUp = useCallback((e: React.PointerEvent) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
+    if (pointers.current.size === 1) {
+      const [p] = [...pointers.current.values()];
+      lastPt.current = { x: p.x, y: p.y };
+    }
+  }, []);
 
   const onWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
-    const rect = svgRef.current!.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+    const { x: mx, y: my } = localPoint(e.clientX, e.clientY);
     const factor = e.deltaY > 0 ? 0.9 : 1.1;
-    setTransform(t => {
-      const ns = Math.max(0.4, Math.min(6, t.scale * factor));
+    setT(t => {
+      const ns = Math.max(SCALE_MIN, Math.min(SCALE_MAX, t.scale * factor));
       return {
         scale: ns,
         x: mx - (mx - t.x) * (ns / t.scale),
         y: my - (my - t.y) * (ns / t.scale),
       };
     });
-  }, []);
+  }, [localPoint, setT]);
 
   const mainSet = new Set<string>(MAIN_ORDER);
   const eddyPos = getEddyPos();
@@ -111,6 +182,7 @@ export default function RiverMap({ onSelect, selectedId }: Props) {
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
       onWheel={onWheel}
       style={{ touchAction: 'none' }}
     >
